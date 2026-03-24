@@ -1,9 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Layout from "../component/layout/Layout";
 import TableLayout from "../component/layout/TableLayout";
 import { api } from "../lib/api/client";
 import type { MyPageData, StaffData } from "../lib/api/types";
-import { Eye, EyeOff, Plus } from "lucide-react";
+import { Eye, EyeOff, Plus, CheckCircle2, XCircle, Clock, Building2 } from "lucide-react";
+
+interface ConnectionRequest {
+  id: number;
+  exporterCompanyId: number;
+  exporterCompanyName: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  requestedAt: string;
+  approvedAt: string | null;
+}
 
 export default function Mypage() {
   const [me, setMe] = useState<MyPageData | null>(null);
@@ -18,9 +27,42 @@ export default function Mypage() {
   const [newEmail, setNewEmail] = useState("");
   const [newStaffPw, setNewStaffPw] = useState("");
 
+  // 연동 요청 상태
+  const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
+
+  const loadConnections = useCallback(async () => {
+    try {
+      const res = await api.get("/api/broker-connection/requests");
+      setConnectionRequests(res as unknown as ConnectionRequest[]);
+    } catch {
+      // 실패해도 페이지 깨지지 않도록
+    }
+  }, []);
+
+  const handleApprove = async (id: number, name: string) => {
+    if (!window.confirm(`${name}의 연동 요청을 승인하시겠습니까?`)) return;
+    try {
+      await api.patch(`/api/broker-connection/requests/${id}/approve`);
+      await loadConnections();
+    } catch {
+      alert("승인에 실패했습니다.");
+    }
+  };
+
+  const handleReject = async (id: number, name: string) => {
+    if (!window.confirm(`${name}의 연동 요청을 거절하시겠습니까?`)) return;
+    try {
+      await api.patch(`/api/broker-connection/requests/${id}/reject`);
+      await loadConnections();
+    } catch {
+      alert("거절에 실패했습니다.");
+    }
+  };
+
   useEffect(() => {
     api.get("/api/users/me").then((d: unknown) => setMe(d as MyPageData));
     api.get("/api/users/staff").then((d: unknown) => setStaff(d as StaffData[]));
+    void loadConnections();
   }, []);
 
   const handleChangePassword = async () => {
@@ -121,6 +163,83 @@ export default function Mypage() {
                 </div>
               )}
             </div>
+          </div>
+        </TableLayout>
+
+        {/* 수출자 연동 요청 */}
+        <TableLayout>
+          <div className="flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[18px] font-bold text-Neutral-900 flex items-center gap-2">
+                <Building2 size={20} />
+                수출자 연동 요청
+                {connectionRequests.filter(r => r.status === "PENDING").length > 0 && (
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-red-500 text-white rounded-full font-medium">
+                    {connectionRequests.filter(r => r.status === "PENDING").length}
+                  </span>
+                )}
+              </h2>
+            </div>
+
+            {connectionRequests.length === 0 ? (
+              <div className="py-8 text-center text-Neutral-500 text-sm">
+                들어온 연동 요청이 없습니다.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {connectionRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    className={`flex items-center justify-between p-4 rounded-lg border ${
+                      req.status === "PENDING"
+                        ? "border-yellow-300 bg-yellow-50"
+                        : req.status === "APPROVED"
+                        ? "border-green-200 bg-green-50"
+                        : "border-red-200 bg-red-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                        req.status === "PENDING" ? "bg-yellow-200" :
+                        req.status === "APPROVED" ? "bg-green-200" : "bg-red-200"
+                      }`}>
+                        {req.status === "PENDING" && <Clock size={18} className="text-yellow-700" />}
+                        {req.status === "APPROVED" && <CheckCircle2 size={18} className="text-green-700" />}
+                        {req.status === "REJECTED" && <XCircle size={18} className="text-red-700" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-Neutral-900">{req.exporterCompanyName}</p>
+                        <p className="text-xs text-Neutral-600">
+                          {req.requestedAt?.split("T")[0] ?? ""} 요청
+                          {req.status === "APPROVED" && " · 승인 완료"}
+                          {req.status === "REJECTED" && " · 거절됨"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {req.status === "PENDING" && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApprove(req.id, req.exporterCompanyName)}
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+                        >
+                          승인
+                        </button>
+                        <button
+                          onClick={() => handleReject(req.id, req.exporterCompanyName)}
+                          className="px-3 py-1.5 text-xs font-medium text-red-600 border border-red-300 rounded-md hover:bg-red-100 transition-colors"
+                        >
+                          거절
+                        </button>
+                      </div>
+                    )}
+                    {req.status === "APPROVED" && (
+                      <span className="px-3 py-1 text-xs text-green-700 bg-green-100 rounded-full font-medium">연동중</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </TableLayout>
 
