@@ -1,161 +1,222 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Trash2, Upload } from "lucide-react";
 import Layout from "../component/layout/Layout";
-import TableLayout from "../component/layout/TableLayout";
 import TablePager from "../component/TablePager";
-import DropdownInput from "../component/inputs/DropdownInput";
-import SearchInput from "../component/inputs/SearchInput";
 import { api } from "../lib/api/client";
-import type { BrokerCase } from "../lib/api/types";
-import { Plus } from "lucide-react";
+import type { BrokerCase, CaseStatus, PaymentStatus } from "../lib/api/types";
 
-const STATUS_LABEL: Record<string, string> = {
-  REGISTERED: "신규등록",
+const PAGE_SIZE = 10;
+
+const STATUS_LABEL: Record<CaseStatus, string> = {
+  REGISTERED: "신규",
   IN_PROGRESS: "진행중",
-  CUSTOMS_DECLARED: "신고완료",
-  CUSTOMS_ACCEPTED: "통관수리",
-  ARRIVAL_CONFIRMED: "반입확인",
+  CUSTOMS_DECLARED: "신고 완료",
+  CUSTOMS_ACCEPTED: "통관 수리",
+  ARRIVAL_CONFIRMED: "반입 확인",
   COMPLETED: "완료",
   CANCELLED: "취소",
 };
 
-const PAYMENT_LABEL: Record<string, string> = {
-  UNPAID: "미수금",
-  PAID: "수금완료",
+const PAYMENT_LABEL: Record<PaymentStatus, string> = {
+  UNPAID: "미완료",
+  PAID: "완료",
   OVERDUE: "연체",
 };
 
-const STATUS_STYLE: Record<string, string> = {
-  REGISTERED: "bg-Neutral-200 text-Neutral-700",
-  IN_PROGRESS: "bg-Blue-50 text-Blue-600",
-  CUSTOMS_DECLARED: "bg-Blue-100 text-Blue-700",
-  CUSTOMS_ACCEPTED: "bg-Green-50 text-Green-600",
-  ARRIVAL_CONFIRMED: "bg-Green-100 text-Green-700",
-  COMPLETED: "bg-Green-50 text-Green-700",
-  CANCELLED: "bg-Red-50 text-Red-600",
+const DECLARE_TYPE_LABEL: Record<BrokerCase["shippingMethod"], string> = {
+  SEA: "Container",
+  AIR: "Air",
+  LAND: "Land",
+  COURIER: "Courier",
 };
 
-const PAYMENT_STYLE: Record<string, string> = {
-  UNPAID: "bg-Neutral-200 text-Neutral-700",
-  PAID: "bg-Green-50 text-Green-600",
-  OVERDUE: "bg-Red-50 text-Red-600",
+function toDateLabel(value?: string): string {
+  if (!value) return "-";
+  return value.slice(0, 10);
+}
+
+function getArrivalLabel(status: CaseStatus): string {
+  return status === "ARRIVAL_CONFIRMED" || status === "COMPLETED" ? "Yes" : "No";
+}
+
+type FilterSelectProps = {
+  value: string;
+  options: string[];
+  placeholder: string;
+  onChange: (value: string) => void;
 };
 
-const PAGE_SIZE = 10;
+function FilterSelect({ value, options, placeholder, onChange }: FilterSelectProps) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-[38px] rounded-[10px] border border-[#D8DDE3] bg-white px-3 text-sm text-[#2C3138]"
+    >
+      <option value="">{placeholder}</option>
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export default function Cases() {
   const navigate = useNavigate();
-  const [cases, setCases] = useState<BrokerCase[]>([]);
+  const [rows, setRows] = useState<BrokerCase[]>([]);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const [clientFilter, setClientFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
 
   useEffect(() => {
-    api.get("/api/cases").then((data: any) => setCases(data as BrokerCase[]));
+    api.get("/api/cases").then((data: unknown) => setRows(data as BrokerCase[]));
   }, []);
 
-  const filtered = cases.filter((c) => {
-    if (search && !c.caseNumber.includes(search) && !c.clientName.includes(search)) return false;
-    if (statusFilter && c.status !== statusFilter) return false;
-    if (paymentFilter && c.paymentStatus !== paymentFilter) return false;
-    return true;
-  });
+  const clientOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.clientName).filter(Boolean))).sort(),
+    [rows],
+  );
+
+  const assigneeOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => String(row.assigneeId ?? "-")))).sort(),
+    [rows],
+  );
+
+  const statusOptions = useMemo(
+    () => (Object.keys(STATUS_LABEL) as CaseStatus[]).map((status) => STATUS_LABEL[status]),
+    [],
+  );
+
+  const paymentOptions = useMemo(
+    () => (Object.keys(PAYMENT_LABEL) as PaymentStatus[]).map((status) => PAYMENT_LABEL[status]),
+    [],
+  );
+
+  const filtered = useMemo(() => {
+    return rows.filter((row) => {
+      if (clientFilter && row.clientName !== clientFilter) return false;
+      if (statusFilter && STATUS_LABEL[row.status] !== statusFilter) return false;
+      if (paymentFilter && PAYMENT_LABEL[row.paymentStatus] !== paymentFilter) return false;
+      if (assigneeFilter && String(row.assigneeId ?? "-") !== assigneeFilter) return false;
+      return true;
+    });
+  }, [rows, clientFilter, statusFilter, paymentFilter, assigneeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   return (
     <Layout activeMenu={2}>
-      <div className="pt-9 flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-[24px] font-bold text-Neutral-900" style={{ fontFamily: "Pretendard" }}>
-            케이스 관리
-          </h1>
-          <button className="flex items-center gap-1.5 px-4 py-2 bg-Brand-2 text-white rounded-lg font-medium text-sm hover:opacity-90 transition-opacity">
-            <Plus size={18} />
-            새 케이스
-          </button>
-        </div>
-
-        <TableLayout>
-          <div className="flex flex-col gap-4">
-            {/* Filters */}
-            <div className="flex items-center gap-3">
-              <div className="w-[200px]">
-                <SearchInput placeholder="케이스번호 / 화주 검색" value={search} onChange={setSearch} />
-              </div>
-              <div className="w-[160px]">
-                <DropdownInput
-                  options={["", "REGISTERED", "IN_PROGRESS", "CUSTOMS_DECLARED", "CUSTOMS_ACCEPTED", "ARRIVAL_CONFIRMED", "COMPLETED", "CANCELLED"]}
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  placeholder="전체 통관상태"
-                />
-              </div>
-              <div className="w-[140px]">
-                <DropdownInput
-                  options={["", "UNPAID", "PAID", "OVERDUE"]}
-                  value={paymentFilter}
-                  onChange={setPaymentFilter}
-                  placeholder="전체 결제상태"
-                />
-              </div>
+      <div className="flex w-full flex-col items-start gap-[10px] px-[8px] pb-[154px] pt-[54px]">
+        <section className="w-full rounded-2xl bg-white px-8 py-8 shadow-[0px_3px_3px_0px_rgba(0,0,0,0.10)]">
+          <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="mr-1 text-[40px] font-semibold leading-none text-[#191B1F]">케이스 목록</h1>
+              <FilterSelect
+                value={clientFilter}
+                options={clientOptions}
+                placeholder="화주"
+                onChange={setClientFilter}
+              />
+              <FilterSelect
+                value={statusFilter}
+                options={statusOptions}
+                placeholder="전체 통관상태"
+                onChange={setStatusFilter}
+              />
+              <FilterSelect
+                value={paymentFilter}
+                options={paymentOptions}
+                placeholder="전체 결제상태"
+                onChange={setPaymentFilter}
+              />
+              <FilterSelect
+                value={assigneeFilter}
+                options={assigneeOptions}
+                placeholder="전체 담당자"
+                onChange={setAssigneeFilter}
+              />
             </div>
 
-            {/* Table */}
-            <table className="w-full text-sm">
+            <button
+              type="button"
+              className="inline-flex h-[44px] items-center gap-2 rounded-[10px] bg-[#1F4ED8] px-5 text-sm font-semibold text-white hover:bg-[#173eb1]"
+            >
+              <Upload size={16} />
+              신고필증 업로드
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-[#E5E7EB]">
+            <table className="min-w-[1200px] w-full text-[15px]">
               <thead>
-                <tr className="bg-Neutral-900 text-white">
-                  <th className="px-4 py-3 text-left font-medium rounded-tl-lg">케이스번호</th>
-                  <th className="px-4 py-3 text-left font-medium">화주</th>
-                  <th className="px-4 py-3 text-left font-medium">운송</th>
-                  <th className="px-4 py-3 text-left font-medium">BL번호</th>
-                  <th className="px-4 py-3 text-left font-medium">통관상태</th>
-                  <th className="px-4 py-3 text-left font-medium">결제상태</th>
-                  <th className="px-4 py-3 text-left font-medium">ETA</th>
-                  <th className="px-4 py-3 text-left font-medium rounded-tr-lg">물품가액</th>
+                <tr className="bg-[#061334] text-white">
+                  <th className="px-4 py-4 text-left font-medium">케이스 번호</th>
+                  <th className="px-4 py-4 text-left font-medium">화주</th>
+                  <th className="px-4 py-4 text-left font-medium">목적국</th>
+                  <th className="px-4 py-4 text-left font-medium">통관 상태</th>
+                  <th className="px-4 py-4 text-left font-medium">신고 구분</th>
+                  <th className="px-4 py-4 text-left font-medium">반입 여부</th>
+                  <th className="px-4 py-4 text-left font-medium">결제 상태</th>
+                  <th className="px-4 py-4 text-left font-medium">담당자</th>
+                  <th className="px-4 py-4 text-left font-medium">신규 등록일</th>
+                  <th className="px-4 py-4 text-center font-medium" />
                 </tr>
               </thead>
               <tbody>
-                {paged.map((c) => (
+                {pageRows.map((row) => (
                   <tr
-                    key={c.id}
-                    onClick={() => navigate(`/cases/${c.id}`)}
-                    className="border-b border-Neutral-200 hover:bg-Neutral-100 cursor-pointer transition-colors"
+                    key={row.id}
+                    onClick={() => navigate(`/cases/${row.id}`)}
+                    className="cursor-pointer border-b border-[#E9EDF2] bg-white hover:bg-[#F8FAFC]"
                   >
-                    <td className="px-4 py-3 font-medium text-Neutral-900">{c.caseNumber}</td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.clientName}</td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.shippingMethod}</td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.blNumber ?? "-"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${STATUS_STYLE[c.status] ?? ""}`}>
-                        {STATUS_LABEL[c.status] ?? c.status}
-                      </span>
+                    <td className="px-4 py-5 font-medium text-[#202632]">{row.caseNumber}</td>
+                    <td className="px-4 py-5 text-[#2F3640]">{row.clientName}</td>
+                    <td className="px-4 py-5 text-[#2F3640]">{row.arrivalPort || "-"}</td>
+                    <td className="px-4 py-5 text-[#2F3640]">{STATUS_LABEL[row.status]}</td>
+                    <td className="px-4 py-5 text-[#2F3640]">{DECLARE_TYPE_LABEL[row.shippingMethod]}</td>
+                    <td className="px-4 py-5 text-[#2F3640]">{getArrivalLabel(row.status)}</td>
+                    <td className="px-4 py-5 text-[#2F3640]">{PAYMENT_LABEL[row.paymentStatus]}</td>
+                    <td className="px-4 py-5 text-[#2F3640]">{row.assigneeId ? `#${row.assigneeId}` : "-"}</td>
+                    <td className="px-4 py-5 text-[#2F3640]">{toDateLabel(row.createdAt)}</td>
+                    <td className="px-4 py-5 text-center">
+                      <button
+                        type="button"
+                        onClick={(event) => event.stopPropagation()}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#FF5C5C] hover:bg-[#FFF1F1]"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${PAYMENT_STYLE[c.paymentStatus] ?? ""}`}>
-                        {PAYMENT_LABEL[c.paymentStatus] ?? c.paymentStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.etaDate ?? "-"}</td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.totalAmount?.toLocaleString() ?? "-"}</td>
                   </tr>
                 ))}
-                {paged.length === 0 && (
+
+                {pageRows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-Neutral-500">
-                      등록된 케이스가 없습니다.
+                    <td colSpan={10} className="px-4 py-14 text-center text-[#667085]">
+                      표시할 케이스가 없습니다.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+          </div>
 
-            {/* Pagination */}
+          <div className="mt-7">
             <TablePager currentPage={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
-        </TableLayout>
+        </section>
       </div>
     </Layout>
   );

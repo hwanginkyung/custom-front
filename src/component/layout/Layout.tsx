@@ -18,6 +18,7 @@ export default function Layout({ children, activeMenu }: LayoutProps) {
     ["케이스 관리", "/cases"],
     ["반입 체크", "/arrival"],
     ["화주 관리", "/clients"],
+    ["NCustoms", "/ncustoms/temp-save"],
   ];
 
   const handleLogout = async () => {

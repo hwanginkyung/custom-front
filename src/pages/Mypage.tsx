@@ -22,6 +22,10 @@ export default function Mypage() {
   const [newPw, setNewPw] = useState("");
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
+  const [ncustomsUserCode, setNcustomsUserCode] = useState("");
+  const [ncustomsWriterId, setNcustomsWriterId] = useState("");
+  const [ncustomsWriterName, setNcustomsWriterName] = useState("");
+  const [savingNcustomsProfile, setSavingNcustomsProfile] = useState(false);
 
   const [addingStaff, setAddingStaff] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -60,10 +64,38 @@ export default function Mypage() {
   };
 
   useEffect(() => {
-    api.get("/api/users/me").then((d: unknown) => setMe(d as MyPageData));
+    api.get("/api/users/me").then((d: unknown) => {
+      const data = d as MyPageData;
+      setMe(data);
+      setNcustomsUserCode(data.ncustomsUserCode ?? "");
+      setNcustomsWriterId(data.ncustomsWriterId ?? "");
+      setNcustomsWriterName(data.ncustomsWriterName ?? "");
+    });
     api.get("/api/users/staff").then((d: unknown) => setStaff(d as StaffData[]));
     void loadConnections();
   }, []);
+
+  const handleSaveNcustomsProfile = async () => {
+    setSavingNcustomsProfile(true);
+    try {
+      const updated = await api.patch("/api/users/me/ncustoms-profile", {
+        ncustomsUserCode,
+        ncustomsWriterId,
+        ncustomsWriterName,
+      });
+      const meData = updated as unknown as MyPageData;
+      setMe(meData);
+      setNcustomsUserCode(meData.ncustomsUserCode ?? "");
+      setNcustomsWriterId(meData.ncustomsWriterId ?? "");
+      setNcustomsWriterName(meData.ncustomsWriterName ?? "");
+      alert("NCustoms 연동 정보가 저장되었습니다.");
+    } catch (err) {
+      console.error(err);
+      alert("NCustoms 연동 정보 저장에 실패했습니다.");
+    } finally {
+      setSavingNcustomsProfile(false);
+    }
+  };
 
   const handleChangePassword = async () => {
     try {
@@ -162,6 +194,52 @@ export default function Mypage() {
                   </div>
                 </div>
               )}
+
+              <div className="mt-2 rounded-lg border border-Neutral-200 bg-Neutral-100 p-4">
+                <div className="mb-3 text-sm font-semibold text-Neutral-900">NCustoms 연동 정보</div>
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-Neutral-600 w-[120px] shrink-0">사용자코드</span>
+                    <input
+                      type="text"
+                      value={ncustomsUserCode}
+                      onChange={(e) => setNcustomsUserCode(e.target.value)}
+                      className="h-10 flex-1 px-3 rounded-md border border-Neutral-400 outline-none text-sm"
+                      placeholder="예: 4"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-Neutral-600 w-[120px] shrink-0">작성자 ID</span>
+                    <input
+                      type="text"
+                      value={ncustomsWriterId}
+                      onChange={(e) => setNcustomsWriterId(e.target.value)}
+                      className="h-10 flex-1 px-3 rounded-md border border-Neutral-400 outline-none text-sm"
+                      placeholder="예: staff01"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-Neutral-600 w-[120px] shrink-0">작성자명</span>
+                    <input
+                      type="text"
+                      value={ncustomsWriterName}
+                      onChange={(e) => setNcustomsWriterName(e.target.value)}
+                      className="h-10 flex-1 px-3 rounded-md border border-Neutral-400 outline-none text-sm"
+                      placeholder="예: 홍길동"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveNcustomsProfile}
+                    disabled={savingNcustomsProfile}
+                    className="h-9 px-4 rounded-md bg-Brand-2 text-white text-sm font-medium disabled:opacity-60"
+                  >
+                    {savingNcustomsProfile ? "저장 중..." : "NCustoms 저장"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </TableLayout>

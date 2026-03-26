@@ -165,6 +165,9 @@ export interface MyPageData {
   role: "MASTER" | "ADMIN" | "STAFF";
   active: boolean;
   companyId: number;
+  ncustomsUserCode?: string | null;
+  ncustomsWriterId?: string | null;
+  ncustomsWriterName?: string | null;
 }
 
 export interface StaffData {
@@ -183,4 +186,91 @@ export interface CreateStaffRequest {
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
+}
+
+/* NCustoms */
+export interface NcustomsShipper {
+  dealCode: string;
+  dealSaupgbn: string;
+  dealSaup: string;
+  dealSangho: string;
+  dealName: string;
+  dealPost: string;
+  dealJuso: string;
+  dealJuso2: string;
+  dealTel: string;
+  dealFax: string;
+  dealTong: string;
+  roadNmCd: string;
+  buldMngNo: string;
+  addDtTime: string;
+  editDtTime: string;
+}
+
+export interface NcustomsTempSaveRequest {
+  year: string;
+  userCode: string;
+  segwan: string;
+  gwa: string;
+  suchuljaCode: string;
+  trustCode: string;
+  ivNo: string;
+  containerNo: string;
+  hsCode: string;
+  singoDate?: string;
+  suchuljaSangho?: string;
+  suchuljaGbn?: string;
+  whajuCode?: string;
+  whajuSangho?: string;
+  whajuTong?: string;
+  whajuSaup?: string;
+  gumaejaCode?: string;
+  gumaejaSangho?: string;
+  trustSangho?: string;
+  trustJuso?: string;
+  trustName?: string;
+  trustTong?: string;
+  trustSaup?: string;
+  trustPost?: string;
+  trustJuso2?: string;
+  trustRoadCd?: string;
+  trustBuildMngNo?: string;
+  postCode?: string;
+  juso?: string;
+  locationAddr?: string;
+  lanNo?: string;
+  hangNo?: string;
+  containerSeqNo?: string;
+  itemName?: string;
+  itemNameLine1?: string;
+  itemNameLine3?: string;
+  qty?: number;
+  totalWeight?: number;
+  weightUnit?: string;
+  packageCount?: number;
+  packageUnit?: string;
+  gyeljeMoney?: string;
+  usdExch?: number;
+  gyeljeInput?: number;
+  indojo?: string;
+  originCountry?: string;
+  mokjukCode?: string;
+  mokjukName?: string;
+  hangguCode?: string;
+  hangguName?: string;
+  unsongType?: string;
+  unsongBox?: string;
+  procGbn?: string;
+  singoGbn?: string;
+  eventType?: string;
+  southNorthTradeYn?: string;
+}
+
+export interface NcustomsTempSaveResponse {
+  expoKey: string;
+  expoJechlNo: string;
+  lanNo: string;
+  hangNo: string;
+  containerNo: string;
+  addDtTime: string;
 }

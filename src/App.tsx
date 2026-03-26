@@ -16,6 +16,7 @@ const CaseDetailPage = lazy(() => import("./pages/CaseDetail"));
 const ArrivalCheckPage = lazy(() => import("./pages/ArrivalCheck"));
 const ClientsPage = lazy(() => import("./pages/Clients"));
 const MypagePage = lazy(() => import("./pages/Mypage"));
+const NcustomsTempSavePage = lazy(() => import("./pages/NcustomsTempSave"));
 
 function RouteFallback() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/cases/:id" element={<ProtectedRoute><CaseDetailPage /></ProtectedRoute>} />
         <Route path="/arrival" element={<ProtectedRoute><ArrivalCheckPage /></ProtectedRoute>} />
         <Route path="/clients" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
+        <Route path="/ncustoms/temp-save" element={<ProtectedRoute><NcustomsTempSavePage /></ProtectedRoute>} />
         <Route path="/mypage" element={<ProtectedRoute><MypagePage /></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/login" replace />} />
