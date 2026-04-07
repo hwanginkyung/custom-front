@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import Layout from "../component/layout/Layout";
 import TableLayout from "../component/layout/TableLayout";
 import SearchInput from "../component/inputs/SearchInput";
@@ -132,13 +133,13 @@ export default function NcustomsTempSave() {
     setSearching(true);
     setMessage("");
     try {
-      const data = await api.get<NcustomsShipper[]>("/api/ncustoms/shippers", {
+      const data = (await api.get<NcustomsShipper[]>("/api/ncustoms/shippers", {
         params: {
           codePrefix: shipperCodePrefix || "00",
           keyword: shipperKeyword || undefined,
           limit: 100,
         },
-      });
+      })) as unknown as NcustomsShipper[];
       setShipperRows(data);
       if (data.length === 0) {
         setMessage("No shipper rows found.");
@@ -233,10 +234,10 @@ export default function NcustomsTempSave() {
 
     setSaving(true);
     try {
-      const response = await api.post<NcustomsTempSaveResponse>(
+      const response = (await api.post<NcustomsTempSaveResponse>(
         "/api/ncustoms/exports/temp-with-container",
         buildPayload(),
-      );
+      )) as unknown as NcustomsTempSaveResponse;
       setResult(response);
       setMessage("Temporary save completed.");
     } catch (error) {
