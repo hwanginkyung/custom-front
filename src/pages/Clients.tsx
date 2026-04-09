@@ -243,72 +243,6 @@ export default function Clients() {
           </div>
         </div>
 
-        {showCreateForm && (
-          <div className="p-4 rounded-lg border border-Neutral-300 bg-white">
-            <form onSubmit={handleCreateClient} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                value={newClient.companyName}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, companyName: e.target.value }))}
-                placeholder="회사명*"
-                className="h-10 px-3 border border-Neutral-300 rounded-md"
-              />
-              <input
-                value={newClient.representativeName}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, representativeName: e.target.value }))}
-                placeholder="대표자*"
-                className="h-10 px-3 border border-Neutral-300 rounded-md"
-              />
-              <input
-                value={newClient.businessNumber}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, businessNumber: e.target.value }))}
-                placeholder="사업자번호*"
-                className="h-10 px-3 border border-Neutral-300 rounded-md"
-              />
-              <input
-                value={newClient.phoneNumber}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, phoneNumber: e.target.value }))}
-                placeholder="연락처"
-                className="h-10 px-3 border border-Neutral-300 rounded-md"
-              />
-              <input
-                value={newClient.email}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, email: e.target.value }))}
-                placeholder="이메일"
-                className="h-10 px-3 border border-Neutral-300 rounded-md"
-              />
-              <input
-                value={newClient.address}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, address: e.target.value }))}
-                placeholder="주소"
-                className="h-10 px-3 border border-Neutral-300 rounded-md"
-              />
-              <input
-                value={newClient.memo ?? ""}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, memo: e.target.value }))}
-                placeholder="메모"
-                className="h-10 px-3 border border-Neutral-300 rounded-md md:col-span-2"
-              />
-
-              <div className="md:col-span-2 flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateForm(false)}
-                  className="h-10 px-4 border border-Neutral-300 rounded-md text-sm text-Neutral-700 hover:bg-Neutral-100"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="h-10 px-4 bg-Brand-2 text-white rounded-md text-sm hover:opacity-90 disabled:bg-Neutral-400"
-                >
-                  {saving ? "저장 중..." : "저장"}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
         <TableLayout>
           <div className="flex flex-col gap-4">
             {/* Table */}
@@ -375,6 +309,83 @@ export default function Clients() {
           </div>
         </TableLayout>
       </div>
+
+      {showCreateForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4"
+          onClick={() => setShowCreateForm(false)}
+        >
+          <div
+            className="w-full max-w-[760px] rounded-xl border border-Neutral-300 bg-white shadow-[0px_8px_24px_0px_rgba(0,0,0,0.15)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-Neutral-200 px-6 py-4">
+              <h2 className="text-[20px] font-semibold text-Neutral-900">화주 추가</h2>
+            </div>
+            <form onSubmit={handleCreateClient} className="grid grid-cols-1 md:grid-cols-2 gap-3 p-6">
+              <input
+                value={newClient.companyName}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, companyName: e.target.value }))}
+                placeholder="회사명*"
+                className="h-11 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.representativeName}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, representativeName: e.target.value }))}
+                placeholder="대표자*"
+                className="h-11 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.businessNumber}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, businessNumber: e.target.value }))}
+                placeholder="사업자번호*"
+                className="h-11 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.phoneNumber}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, phoneNumber: e.target.value }))}
+                placeholder="연락처"
+                className="h-11 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.email}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="이메일"
+                className="h-11 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.address}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, address: e.target.value }))}
+                placeholder="주소"
+                className="h-11 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.memo ?? ""}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, memo: e.target.value }))}
+                placeholder="메모"
+                className="h-11 px-3 border border-Neutral-300 rounded-md md:col-span-2"
+              />
+
+              <div className="md:col-span-2 flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(false)}
+                  className="h-10 px-4 border border-Neutral-300 rounded-md text-sm text-Neutral-700 hover:bg-Neutral-100"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="h-10 px-4 bg-Brand-2 text-white rounded-md text-sm hover:opacity-90 disabled:bg-Neutral-400"
+                >
+                  {saving ? "저장 중..." : "저장"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
