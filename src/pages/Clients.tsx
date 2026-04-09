@@ -4,7 +4,7 @@ import TableLayout from "../component/layout/TableLayout";
 import TablePager from "../component/TablePager";
 import SearchInput from "../component/inputs/SearchInput";
 import { api } from "../lib/api/client";
-import type { Client } from "../lib/api/types";
+import type { Client, CreateClientRequest } from "../lib/api/types";
 import { Plus } from "lucide-react";
 
 const PAGE_SIZE = 10;
@@ -13,9 +13,25 @@ export default function Clients() {
   const [clients, setClients] = useState<Client[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newClient, setNewClient] = useState<CreateClientRequest>({
+    companyName: "",
+    representativeName: "",
+    businessNumber: "",
+    phoneNumber: "",
+    email: "",
+    address: "",
+    memo: "",
+  });
+
+  const fetchClients = async () => {
+    const data = (await api.get("/api/clients")) as unknown as Client[];
+    setClients(data);
+  };
 
   useEffect(() => {
-    api.get("/api/clients").then((data: unknown) => setClients(data as Client[]));
+    fetchClients();
   }, []);
 
   const filtered = clients.filter((c) => {
@@ -33,10 +49,55 @@ export default function Clients() {
   const handleToggleActive = async (clientId: number) => {
     try {
       await api.patch(`/api/clients/${clientId}/toggle-active`);
-      const updated = (await api.get("/api/clients")) as unknown as Client[];
-      setClients(updated);
+      await fetchClients();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleOpenCreateForm = () => {
+    setNewClient({
+      companyName: "",
+      representativeName: "",
+      businessNumber: "",
+      phoneNumber: "",
+      email: "",
+      address: "",
+      memo: "",
+    });
+    setShowCreateForm(true);
+  };
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saving) return;
+
+    const payload: CreateClientRequest = {
+      companyName: newClient.companyName.trim(),
+      representativeName: newClient.representativeName.trim(),
+      businessNumber: newClient.businessNumber.trim(),
+      phoneNumber: newClient.phoneNumber.trim(),
+      email: newClient.email.trim(),
+      address: newClient.address.trim(),
+      memo: newClient.memo?.trim(),
+    };
+
+    if (!payload.companyName || !payload.representativeName || !payload.businessNumber) {
+      alert("회사명, 대표자, 사업자번호는 필수입니다.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await api.post("/api/clients", payload);
+      await fetchClients();
+      setShowCreateForm(false);
+      setPage(1);
+    } catch (err) {
+      console.error(err);
+      alert("화주 추가에 실패했습니다.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -50,11 +111,80 @@ export default function Clients() {
           >
             화주 관리
           </h1>
-          <button className="flex items-center gap-1.5 px-4 py-2 bg-Brand-2 text-white rounded-lg font-medium text-sm hover:opacity-90 transition-opacity">
+          <button
+            onClick={handleOpenCreateForm}
+            className="flex items-center gap-1.5 px-4 py-2 bg-Brand-2 text-white rounded-lg font-medium text-sm hover:opacity-90 transition-opacity"
+          >
             <Plus size={18} />
             추가
           </button>
         </div>
+
+        {showCreateForm && (
+          <div className="p-4 rounded-lg border border-Neutral-300 bg-white">
+            <form onSubmit={handleCreateClient} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input
+                value={newClient.companyName}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, companyName: e.target.value }))}
+                placeholder="회사명*"
+                className="h-10 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.representativeName}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, representativeName: e.target.value }))}
+                placeholder="대표자*"
+                className="h-10 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.businessNumber}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, businessNumber: e.target.value }))}
+                placeholder="사업자번호*"
+                className="h-10 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.phoneNumber}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, phoneNumber: e.target.value }))}
+                placeholder="연락처"
+                className="h-10 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.email}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="이메일"
+                className="h-10 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.address}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, address: e.target.value }))}
+                placeholder="주소"
+                className="h-10 px-3 border border-Neutral-300 rounded-md"
+              />
+              <input
+                value={newClient.memo ?? ""}
+                onChange={(e) => setNewClient((prev) => ({ ...prev, memo: e.target.value }))}
+                placeholder="메모"
+                className="h-10 px-3 border border-Neutral-300 rounded-md md:col-span-2"
+              />
+
+              <div className="md:col-span-2 flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(false)}
+                  className="h-10 px-4 border border-Neutral-300 rounded-md text-sm text-Neutral-700 hover:bg-Neutral-100"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="h-10 px-4 bg-Brand-2 text-white rounded-md text-sm hover:opacity-90 disabled:bg-Neutral-400"
+                >
+                  {saving ? "저장 중..." : "저장"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         <TableLayout>
           <div className="flex flex-col gap-4">
