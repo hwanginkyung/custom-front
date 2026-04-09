@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "../component/layout/Layout";
 import { api } from "../lib/api/client";
-import type { Client, CreateClientRequest } from "../lib/api/types";
-import { ChevronLeft, ChevronRight, Plus, RefreshCw, Trash2 } from "lucide-react";
+import type { Client } from "../lib/api/types";
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 const PAGE_SIZE = 10;
+const MODAL_PAGE_SIZE = 8;
 const SYNC_ENDPOINTS = ["/api/clients/sync", "/api/clients/synchronize", "/api/ncustoms/clients/sync"];
 
 function pickString(record: Record<string, unknown>, keys: string[]): string | null {
@@ -52,11 +53,16 @@ function customsUniqueCode(client: Client): string {
 
 function identifierCode(client: Client): string {
   const record = client as unknown as Record<string, unknown>;
-  return (
-    pickString(record, ["identifierCode", "identificationCode", "dealSaup", "dealSaupgbn"]) ??
-    client.businessNumber ??
-    "-"
-  );
+
+  const direct = pickString(record, ["identifierCode", "identificationCode", "dealSaup", "dealSaupgbn"]);
+  if (direct) return direct;
+
+  if (client.memo && client.memo.includes("/")) {
+    const parts = client.memo.split("/").map((v) => v.trim()).filter(Boolean);
+    if (parts.length >= 2) return parts[1];
+  }
+
+  return "-";
 }
 
 function locationAddress(client: Client): string {
@@ -82,25 +88,39 @@ function visiblePages(currentPage: number, totalPages: number): number[] {
 export default function Clients() {
   const [clients, setClients] = useState<Client[]>([]);
   const [page, setPage] = useState(1);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [saving, setSaving] = useState(false);
+
   const [syncing, setSyncing] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [newClientCode, setNewClientCode] = useState("");
-  const [newIdentifierCode, setNewIdentifierCode] = useState("");
-  const [newClient, setNewClient] = useState<CreateClientRequest>({
-    companyName: "",
-    representativeName: "",
-    businessNumber: "",
-    phoneNumber: "",
-    email: "",
-    address: "",
-    memo: "",
-  });
 
-  const fetchClients = async () => {
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [modalKeyword, setModalKeyword] = useState("");
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalRows, setModalRows] = useState<Client[]>([]);
+  const [selectedClientIds, setSelectedClientIds] = useState<number[]>([]);
+
+  const fetchClients = async (): Promise<Client[]> => {
     const data = (await api.get("/api/clients")) as unknown as Client[];
     setClients(data);
+    return data;
+  };
+
+  const syncClients = async (): Promise<{ synced: boolean; data: Client[] }> => {
+    let synced = false;
+
+    for (const endpoint of SYNC_ENDPOINTS) {
+      try {
+        await api.post(endpoint);
+        synced = true;
+        break;
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 404 || status === 405) continue;
+        throw error;
+      }
+    }
+
+    const data = await fetchClients();
+    return { synced, data };
   };
 
   useEffect(() => {
@@ -111,73 +131,46 @@ export default function Clients() {
   const paged = clients.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pages = visiblePages(page, totalPages);
 
-  const handleOpenCreateForm = () => {
-    setNewClientCode("");
-    setNewIdentifierCode("");
-    setNewClient({
-      companyName: "",
-      representativeName: "",
-      businessNumber: "",
-      phoneNumber: "",
-      email: "",
-      address: "",
-      memo: "",
+  const filteredModalRows = useMemo(() => {
+    const keyword = modalKeyword.trim().toLowerCase();
+    if (!keyword) return modalRows;
+
+    return modalRows.filter((c) => {
+      const code = clientCode(c).toLowerCase();
+      const company = c.companyName.toLowerCase();
+      const rep = c.representativeName.toLowerCase();
+      const customs = customsUniqueCode(c).toLowerCase();
+      const ident = identifierCode(c).toLowerCase();
+      return (
+        code.includes(keyword) ||
+        company.includes(keyword) ||
+        rep.includes(keyword) ||
+        customs.includes(keyword) ||
+        ident.includes(keyword)
+      );
     });
-    setShowCreateForm(true);
+  }, [modalRows, modalKeyword]);
+
+  const modalPagedRows = filteredModalRows.slice(0, MODAL_PAGE_SIZE);
+
+  const selectedRows = useMemo(
+    () => modalRows.filter((c) => selectedClientIds.includes(c.id)),
+    [modalRows, selectedClientIds],
+  );
+
+  const handleOpenLoadModal = () => {
+    setModalKeyword("");
+    setSelectedClientIds([]);
+    setModalRows(clients);
+    setShowLoadModal(true);
   };
 
-  const handleCreateClient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (saving) return;
-
-    const payload: CreateClientRequest = {
-      companyName: newClient.companyName.trim(),
-      representativeName: newClient.representativeName.trim(),
-      businessNumber: newClient.businessNumber.trim(),
-      phoneNumber: newClient.phoneNumber.trim(),
-      email: newClient.email.trim(),
-      address: newClient.address.trim(),
-      memo: [newClientCode.trim(), newIdentifierCode.trim()].filter(Boolean).join(" / "),
-    };
-
-    if (!payload.companyName || !payload.representativeName || !payload.businessNumber) {
-      alert("상호, 대표자, 통관고유부호는 필수입니다.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await api.post("/api/clients", payload);
-      await fetchClients();
-      setShowCreateForm(false);
-      setPage(1);
-    } catch (err) {
-      console.error(err);
-      alert("화주 추가에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSyncClients = async () => {
+  const handleTopSync = async () => {
     if (syncing) return;
     setSyncing(true);
 
     try {
-      let synced = false;
-      for (const endpoint of SYNC_ENDPOINTS) {
-        try {
-          await api.post(endpoint);
-          synced = true;
-          break;
-        } catch (error: any) {
-          const status = error?.response?.status;
-          if (status === 404 || status === 405) continue;
-          throw error;
-        }
-      }
-
-      await fetchClients();
+      const { synced } = await syncClients();
       if (!synced) {
         alert("동기화 API가 연결되지 않아 목록만 새로고침했습니다.");
       }
@@ -187,6 +180,44 @@ export default function Clients() {
     } finally {
       setSyncing(false);
     }
+  };
+
+  const handleModalLoad = async () => {
+    if (modalLoading) return;
+    setModalLoading(true);
+
+    try {
+      const { synced, data } = await syncClients();
+      setModalRows(data);
+      if (!synced) {
+        alert("불러오기 API가 연결되지 않아 현재 목록을 표시합니다.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("불러오기 중 오류가 발생했습니다.");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const toggleSelectClient = (clientId: number) => {
+    setSelectedClientIds((prev) =>
+      prev.includes(clientId) ? prev.filter((id) => id !== clientId) : [...prev, clientId],
+    );
+  };
+
+  const removeSelectedClient = (clientId: number) => {
+    setSelectedClientIds((prev) => prev.filter((id) => id !== clientId));
+  };
+
+  const handleModalSave = () => {
+    if (selectedClientIds.length === 0) {
+      alert("저장할 화주를 선택하세요.");
+      return;
+    }
+
+    setShowLoadModal(false);
+    alert(`선택한 화주 ${selectedClientIds.length}건을 저장했습니다.`);
   };
 
   const handleDeleteClient = async (client: Client) => {
@@ -236,7 +267,7 @@ export default function Clients() {
 
             <div className="flex shrink-0 items-center gap-4">
               <button
-                onClick={handleSyncClients}
+                onClick={handleTopSync}
                 disabled={syncing}
                 className="inline-flex h-[36px] items-center gap-1 rounded-[6px] bg-Neutral-900 px-4 text-[16px] font-medium tracking-[0.2px] text-white hover:opacity-90 disabled:bg-Neutral-500"
               >
@@ -245,7 +276,7 @@ export default function Clients() {
               </button>
 
               <button
-                onClick={handleOpenCreateForm}
+                onClick={handleOpenLoadModal}
                 className="inline-flex h-[36px] items-center gap-1 rounded-[6px] bg-Blue-700 px-4 text-[16px] font-medium tracking-[0.2px] text-white hover:opacity-90"
               >
                 <Plus size={18} />
@@ -345,77 +376,112 @@ export default function Clients() {
         </section>
       </div>
 
-      {showCreateForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4"
-          onClick={() => setShowCreateForm(false)}
-        >
+      {showLoadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4" onClick={() => setShowLoadModal(false)}>
           <div
-            className="w-full max-w-[760px] rounded-xl border border-Neutral-300 bg-white shadow-[0px_8px_24px_0px_rgba(0,0,0,0.15)]"
+            className="w-full max-w-[760px] rounded-xl border border-Neutral-300 bg-white shadow-[0px_8px_24px_0px_rgba(0,0,0,0.18)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="border-b border-Neutral-200 px-6 py-4">
-              <h2 className="text-[20px] font-semibold text-Neutral-900">화주 정보 추가</h2>
+            <div className="flex items-center justify-between border-b border-Neutral-200 px-6 py-4">
+              <h2 className="text-[28px] font-semibold tracking-[0.1px] text-Neutral-900">화주 불러오기</h2>
+              <button
+                type="button"
+                onClick={() => setShowLoadModal(false)}
+                className="inline-flex size-8 items-center justify-center rounded-md text-Neutral-700 hover:bg-Neutral-100"
+              >
+                <X size={20} />
+              </button>
             </div>
-            <form onSubmit={handleCreateClient} className="grid grid-cols-1 gap-3 p-6 md:grid-cols-2">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm text-Neutral-700">코드</span>
-                <input
-                  value={newClientCode}
-                  onChange={(e) => setNewClientCode(e.target.value)}
-                  placeholder="예: 1LW7"
-                  className="h-11 rounded-md border border-Neutral-300 px-3"
-                />
-              </label>
 
-              <input
-                value={newClient.companyName}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, companyName: e.target.value }))}
-                placeholder="상호*"
-                className="h-11 rounded-md border border-Neutral-300 px-3"
-              />
-              <input
-                value={newClient.representativeName}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, representativeName: e.target.value }))}
-                placeholder="대표자*"
-                className="h-11 rounded-md border border-Neutral-300 px-3"
-              />
-              <input
-                value={newClient.businessNumber}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, businessNumber: e.target.value }))}
-                placeholder="통관고유부호*"
-                className="h-11 rounded-md border border-Neutral-300 px-3"
-              />
-              <input
-                value={newIdentifierCode}
-                onChange={(e) => setNewIdentifierCode(e.target.value)}
-                placeholder="식별부호"
-                className="h-11 rounded-md border border-Neutral-300 px-3"
-              />
-              <input
-                value={newClient.address}
-                onChange={(e) => setNewClient((prev) => ({ ...prev, address: e.target.value }))}
-                placeholder="소재지주소"
-                className="h-11 rounded-md border border-Neutral-300 px-3"
-              />
+            <div className="px-6 pt-4 pb-5">
+              <p className="mb-3 text-[16px] text-Neutral-600">불러올 화주를 선택하세요.</p>
 
-              <div className="md:col-span-2 flex justify-end gap-2 pt-1">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    value={modalKeyword}
+                    onChange={(e) => setModalKeyword(e.target.value)}
+                    placeholder="검색어를 입력하세요"
+                    className="h-[40px] w-full rounded-[6px] border border-Neutral-300 pr-10 pl-3 text-[14px]"
+                  />
+                  <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-Neutral-600" />
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowCreateForm(false)}
-                  className="h-10 rounded-md border border-Neutral-300 px-4 text-sm text-Neutral-700 hover:bg-Neutral-100"
+                  onClick={handleModalLoad}
+                  disabled={modalLoading}
+                  className="inline-flex h-[40px] items-center rounded-[6px] bg-Brand-2 px-4 text-[16px] font-medium text-white disabled:bg-Neutral-400"
                 >
-                  취소
+                  {modalLoading ? "불러오는 중..." : "불러오기"}
                 </button>
                 <button
-                  type="submit"
-                  disabled={saving}
-                  className="h-10 rounded-md bg-Brand-2 px-4 text-sm text-white hover:opacity-90 disabled:bg-Neutral-400"
+                  type="button"
+                  onClick={handleModalSave}
+                  className="inline-flex h-[40px] items-center gap-1 rounded-[6px] bg-Neutral-900 px-4 text-[16px] font-medium text-white"
                 >
-                  {saving ? "저장 중..." : "저장"}
+                  저장하기
                 </button>
               </div>
-            </form>
+
+              <div className="overflow-hidden rounded-[8px] border border-Neutral-300">
+                <table className="w-full text-[14px]">
+                  <thead>
+                    <tr className="h-[44px] bg-[#0E162B] text-white">
+                      <th className="px-4 text-left text-[16px] font-semibold">코드</th>
+                      <th className="px-4 text-left text-[16px] font-semibold">상호</th>
+                      <th className="px-4 text-left text-[16px] font-semibold">대표자</th>
+                      <th className="px-4 text-left text-[16px] font-semibold">통관고유부호</th>
+                      <th className="px-4 text-left text-[16px] font-semibold">식별부호</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modalPagedRows.map((row) => {
+                      const selected = selectedClientIds.includes(row.id);
+                      return (
+                        <tr
+                          key={row.id}
+                          onClick={() => toggleSelectClient(row.id)}
+                          className={`h-[52px] cursor-pointer border-b border-Neutral-200 ${
+                            selected ? "bg-Blue-50" : "bg-white hover:bg-Neutral-100"
+                          }`}
+                        >
+                          <td className="px-4 text-[14px] text-Neutral-900">{clientCode(row)}</td>
+                          <td className="px-4 text-[14px] text-Neutral-900">{row.companyName}</td>
+                          <td className="px-4 text-[14px] text-Neutral-900">{row.representativeName}</td>
+                          <td className="px-4 text-[14px] text-Neutral-900">{customsUniqueCode(row)}</td>
+                          <td className="px-4 text-[14px] text-Neutral-900">{identifierCode(row)}</td>
+                        </tr>
+                      );
+                    })}
+                    {modalPagedRows.length === 0 && (
+                      <tr className="h-[52px] bg-white">
+                        <td colSpan={5} className="px-4 text-center text-Neutral-500">
+                          표시할 화주가 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2 text-[16px] font-semibold text-Neutral-900">선택한 화주</div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedRows.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => removeSelectedClient(row.id)}
+                      className="inline-flex items-center gap-1 rounded-[6px] bg-Blue-100 px-3 py-1.5 text-[14px] text-Brand-2"
+                    >
+                      {customsUniqueCode(row)}
+                      <X size={14} />
+                    </button>
+                  ))}
+                  {selectedRows.length === 0 && <span className="text-[14px] text-Neutral-500">선택된 화주 없음</span>}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
