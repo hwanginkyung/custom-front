@@ -2,19 +2,85 @@ import { useEffect, useState } from "react";
 import Layout from "../component/layout/Layout";
 import TableLayout from "../component/layout/TableLayout";
 import TablePager from "../component/TablePager";
-import SearchInput from "../component/inputs/SearchInput";
 import { api } from "../lib/api/client";
 import type { Client, CreateClientRequest } from "../lib/api/types";
-import { Plus } from "lucide-react";
+import { Plus, RefreshCw, Trash2 } from "lucide-react";
 
 const PAGE_SIZE = 10;
+const SYNC_ENDPOINTS = ["/api/clients/sync", "/api/clients/synchronize", "/api/ncustoms/clients/sync"];
+
+function pickString(record: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function isSynced(client: Client): boolean {
+  const record = client as unknown as Record<string, unknown>;
+
+  if (typeof record.synced === "boolean") {
+    return record.synced;
+  }
+  if (typeof record.isSynced === "boolean") {
+    return record.isSynced;
+  }
+
+  const syncStatus = pickString(record, ["syncStatus", "sync", "status"]);
+  if (syncStatus) {
+    const upper = syncStatus.toUpperCase();
+    if (upper.includes("UNSYNC") || upper.includes("FAIL") || upper.includes("비동기")) {
+      return false;
+    }
+    if (upper.includes("SYNC") || upper.includes("SUCCESS") || upper.includes("동기")) {
+      return true;
+    }
+  }
+
+  return client.active;
+}
+
+function clientCode(client: Client): string {
+  const record = client as unknown as Record<string, unknown>;
+  return (
+    pickString(record, ["code", "clientCode", "dealCode", "shipperCode"]) ??
+    `CL${String(client.id).padStart(4, "0")}`
+  );
+}
+
+function customsUniqueCode(client: Client): string {
+  const record = client as unknown as Record<string, unknown>;
+  return (
+    pickString(record, ["customsUniqueCode", "customsCode", "dealTong", "whajuTong"]) ??
+    client.businessNumber ??
+    "-"
+  );
+}
+
+function identifierCode(client: Client): string {
+  const record = client as unknown as Record<string, unknown>;
+  return (
+    pickString(record, ["identifierCode", "identificationCode", "dealSaup", "dealSaupgbn"]) ??
+    client.businessNumber ??
+    "-"
+  );
+}
+
+function locationAddress(client: Client): string {
+  const record = client as unknown as Record<string, unknown>;
+  return pickString(record, ["address", "dealJuso", "locationAddress"]) ?? "-";
+}
 
 export default function Clients() {
   const [clients, setClients] = useState<Client[]>([]);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [newClient, setNewClient] = useState<CreateClientRequest>({
     companyName: "",
     representativeName: "",
@@ -34,26 +100,8 @@ export default function Clients() {
     fetchClients();
   }, []);
 
-  const filtered = clients.filter((c) => {
-    if (!search) return true;
-    return (
-      c.companyName.includes(search) ||
-      c.businessNumber.includes(search) ||
-      c.representativeName.includes(search)
-    );
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const handleToggleActive = async (clientId: number) => {
-    try {
-      await api.patch(`/api/clients/${clientId}/toggle-active`);
-      await fetchClients();
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const totalPages = Math.max(1, Math.ceil(clients.length / PAGE_SIZE));
+  const paged = clients.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const handleOpenCreateForm = () => {
     setNewClient({
@@ -101,23 +149,98 @@ export default function Clients() {
     }
   };
 
+  const handleSyncClients = async () => {
+    if (syncing) return;
+    setSyncing(true);
+
+    try {
+      let synced = false;
+      for (const endpoint of SYNC_ENDPOINTS) {
+        try {
+          await api.post(endpoint);
+          synced = true;
+          break;
+        } catch (error: any) {
+          const status = error?.response?.status;
+          if (status === 404 || status === 405) {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      await fetchClients();
+      if (!synced) {
+        alert("동기화 API가 연결되지 않아 목록만 새로고침했습니다.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("동기화 중 오류가 발생했습니다.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDeleteClient = async (client: Client) => {
+    if (deletingId) return;
+
+    const ok = window.confirm(`'${client.companyName}' 화주를 삭제할까요?`);
+    if (!ok) return;
+
+    setDeletingId(client.id);
+    try {
+      await api.delete(`/api/clients/${client.id}`);
+      await fetchClients();
+      if (page > 1 && (clients.length - 1) <= (page - 1) * PAGE_SIZE) {
+        setPage(page - 1);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("화주 삭제에 실패했습니다.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <Layout activeMenu={4}>
       <div className="pt-9 flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <h1
-            className="text-[24px] font-bold text-Neutral-900"
-            style={{ fontFamily: "Pretendard" }}
-          >
-            화주 관리
-          </h1>
-          <button
-            onClick={handleOpenCreateForm}
-            className="flex items-center gap-1.5 px-4 py-2 bg-Brand-2 text-white rounded-lg font-medium text-sm hover:opacity-90 transition-opacity"
-          >
-            <Plus size={18} />
-            추가
-          </button>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-5">
+            <h1
+              className="text-[24px] font-bold text-Neutral-900"
+              style={{ fontFamily: "Pretendard" }}
+            >
+              화주 목록
+            </h1>
+            <div className="flex items-center gap-4 text-sm text-Neutral-600">
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-block size-2.5 rounded-full bg-Green-500" />
+                동기화
+              </div>
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-block size-2.5 rounded-full bg-Red-500" />
+                비동기화
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSyncClients}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-Neutral-900 text-white rounded-md font-medium text-sm hover:opacity-90 disabled:bg-Neutral-500 transition-opacity"
+            >
+              <RefreshCw size={16} className={syncing ? "animate-spin" : ""} />
+              통관 프로그램 동기화
+            </button>
+            <button
+              onClick={handleOpenCreateForm}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-Brand-2 text-white rounded-md font-medium text-sm hover:opacity-90 transition-opacity"
+            >
+              <Plus size={18} />
+              추가
+            </button>
+          </div>
         </div>
 
         {showCreateForm && (
@@ -188,30 +311,21 @@ export default function Clients() {
 
         <TableLayout>
           <div className="flex flex-col gap-4">
-            {/* Search */}
-            <div className="flex items-center gap-3">
-              <div className="w-[280px]">
-                <SearchInput
-                  placeholder="회사명 / 사업자번호 / 대표자 검색"
-                  value={search}
-                  onChange={setSearch}
-                />
-              </div>
-            </div>
-
             {/* Table */}
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] text-sm">
               <thead>
                 <tr className="bg-Neutral-900 text-white">
                   <th className="px-4 py-3 text-center font-medium rounded-tl-lg w-[60px]">
                     상태
                   </th>
-                  <th className="px-4 py-3 text-left font-medium">회사명</th>
+                  <th className="px-4 py-3 text-left font-medium w-[110px]">코드</th>
+                  <th className="px-4 py-3 text-left font-medium">상호</th>
                   <th className="px-4 py-3 text-left font-medium">대표자</th>
-                  <th className="px-4 py-3 text-left font-medium">사업자번호</th>
-                  <th className="px-4 py-3 text-left font-medium">연락처</th>
-                  <th className="px-4 py-3 text-left font-medium">이메일</th>
-                  <th className="px-4 py-3 text-left font-medium rounded-tr-lg">주소</th>
+                  <th className="px-4 py-3 text-left font-medium">통관고유부호</th>
+                  <th className="px-4 py-3 text-left font-medium">식별부호</th>
+                  <th className="px-4 py-3 text-left font-medium">소재지주소</th>
+                  <th className="px-4 py-3 text-center font-medium rounded-tr-lg w-[72px]" />
                 </tr>
               </thead>
               <tbody>
@@ -221,35 +335,41 @@ export default function Clients() {
                     className="border-b border-Neutral-200 hover:bg-Neutral-100 transition-colors"
                   >
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => handleToggleActive(c.id)}
-                        className="inline-flex items-center justify-center"
-                        title={c.active ? "활성" : "비활성"}
-                      >
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full ${
-                            c.active ? "bg-Green-500" : "bg-Red-500"
-                          }`}
-                        />
-                      </button>
+                      <span
+                        className={`inline-block w-3 h-3 rounded-full ${
+                          isSynced(c) ? "bg-Green-500" : "bg-Red-500"
+                        }`}
+                        title={isSynced(c) ? "동기화" : "비동기화"}
+                      />
                     </td>
+                    <td className="px-4 py-3 text-Neutral-700">{clientCode(c)}</td>
                     <td className="px-4 py-3 font-medium text-Neutral-900">{c.companyName}</td>
                     <td className="px-4 py-3 text-Neutral-700">{c.representativeName}</td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.businessNumber}</td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.phoneNumber}</td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.email}</td>
-                    <td className="px-4 py-3 text-Neutral-700">{c.address}</td>
+                    <td className="px-4 py-3 text-Neutral-700">{customsUniqueCode(c)}</td>
+                    <td className="px-4 py-3 text-Neutral-700">{identifierCode(c)}</td>
+                    <td className="px-4 py-3 text-Neutral-700">{locationAddress(c)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => handleDeleteClient(c)}
+                        disabled={deletingId === c.id}
+                        className="inline-flex items-center justify-center text-Red-500 hover:text-Red-600 disabled:text-Neutral-300"
+                        title="삭제"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {paged.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-Neutral-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-Neutral-500">
                       등록된 화주가 없습니다.
                     </td>
                   </tr>
                 )}
               </tbody>
-            </table>
+              </table>
+            </div>
 
             <TablePager currentPage={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
