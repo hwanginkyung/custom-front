@@ -18,7 +18,6 @@ export default function Layout({ children, activeMenu }: LayoutProps) {
     ["케이스 관리", "/cases"],
     ["반입 체크", "/arrival"],
     ["화주 관리", "/clients"],
-    ["NCustoms", "/ncustoms/temp-save"],
   ];
 
   const handleLogout = async () => {
@@ -71,13 +70,11 @@ export default function Layout({ children, activeMenu }: LayoutProps) {
               </span>
             </div>
 
-            <div className="ml-[32px]">
-              <Divider />
-            </div>
-
-            <nav className="flex items-center ml-[32px]">
+            <nav className="flex items-center ml-[40px]">
               {menus.map(([menu, route], index) => {
                 const isActive = activeMenu === index + 1;
+                // 반입 체크(index 2) 뒤, 화주 관리(index 3) 뒤에 Divider 삽입
+                const showDividerAfter = index === 2;
                 return (
                   <React.Fragment key={index}>
                     <div
@@ -92,7 +89,11 @@ export default function Layout({ children, activeMenu }: LayoutProps) {
                     >
                       {menu}
                     </div>
-                    {index < menus.length - 1 && <div className="w-[32px]" />}
+                    {index < menus.length - 1 && (
+                      showDividerAfter
+                        ? <><div className="w-[32px]" /><Divider /><div className="w-[32px]" /></>
+                        : <div className="w-[32px]" />
+                    )}
                   </React.Fragment>
                 );
               })}
