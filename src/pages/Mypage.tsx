@@ -9,9 +9,15 @@ interface ConnectionRequest {
   id: number;
   exporterCompanyId: number;
   exporterCompanyName: string;
+  exporterBusinessNumber: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED";
   requestedAt: string;
   approvedAt: string | null;
+  matchedClientId: number | null;
+  matchedClientName: string | null;
+  matchedBy: "EXTERNAL_CODE" | "BUSINESS_NUMBER" | "COMPANY_NAME" | null;
+  linkedClientId: number | null;
+  linkedClientName: string | null;
 }
 
 export default function Mypage() {
@@ -33,20 +39,46 @@ export default function Mypage() {
 
   // 연동 요청 상태
   const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
+  const [connectionLoading, setConnectionLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const loadConnections = useCallback(async () => {
+    setConnectionLoading(true);
     try {
       const res = await api.get("/api/broker-connection/requests");
       setConnectionRequests(res as unknown as ConnectionRequest[]);
+      setConnectionError(null);
     } catch {
-      // 실패해도 페이지 깨지지 않도록
+      setConnectionError("연동 요청을 불러오지 못했습니다. 새로고침을 눌러 다시 시도해 주세요.");
+    } finally {
+      setConnectionLoading(false);
     }
   }, []);
 
   const handleApprove = async (id: number, name: string) => {
-    if (!window.confirm(`${name}의 연동 요청을 승인하시겠습니까?`)) return;
+    const req = connectionRequests.find((item) => item.id === id);
+    let approveUrl = `/api/broker-connection/requests/${id}/approve`;
+
+    if (req?.matchedClientId && req?.matchedClientName) {
+      const matchedByLabel =
+        req.matchedBy === "EXTERNAL_CODE" ? "기존 연동코드" :
+        req.matchedBy === "BUSINESS_NUMBER" ? "사업자번호" :
+        req.matchedBy === "COMPANY_NAME" ? "업체명" : "자동 매칭";
+
+      const useMatchedClient = window.confirm(
+        `${name} 요청이 "${req.matchedClientName}" 화주와 매칭되었습니다. (${matchedByLabel})\n이 화주와 매칭하시겠습니까?`
+      );
+      if (useMatchedClient) {
+        approveUrl = `${approveUrl}?matchedClientId=${req.matchedClientId}`;
+      } else if (!window.confirm(`${name} 요청을 매칭 없이 수동 승인하시겠습니까?`)) {
+        return;
+      }
+    } else if (!window.confirm(`${name}의 연동 요청을 승인하시겠습니까?`)) {
+      return;
+    }
+
     try {
-      await api.patch(`/api/broker-connection/requests/${id}/approve`);
+      await api.patch(approveUrl);
       await loadConnections();
     } catch {
       alert("승인에 실패했습니다.");
@@ -257,11 +289,25 @@ export default function Mypage() {
                   </span>
                 )}
               </h2>
+              <button
+                type="button"
+                onClick={() => void loadConnections()}
+                disabled={connectionLoading}
+                className="h-8 px-3 rounded-md border border-Neutral-300 text-xs font-medium text-Neutral-700 hover:bg-Neutral-100 disabled:opacity-60"
+              >
+                {connectionLoading ? "조회 중..." : "새로고침"}
+              </button>
             </div>
+
+            {connectionError && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {connectionError}
+              </div>
+            )}
 
             {connectionRequests.length === 0 ? (
               <div className="py-8 text-center text-Neutral-500 text-sm">
-                들어온 연동 요청이 없습니다.
+                {connectionLoading ? "연동 요청을 불러오는 중입니다." : "들어온 연동 요청이 없습니다."}
               </div>
             ) : (
               <div className="flex flex-col gap-3">

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, User, LogOut } from "lucide-react";
 import { api } from "../../lib/api/client";
@@ -12,6 +12,7 @@ interface LayoutProps {
 
 export default function Layout({ children, activeMenu }: LayoutProps) {
   const navigate = useNavigate();
+  const [pendingConnectionCount, setPendingConnectionCount] = useState(0);
 
   const menus: Array<[string, string]> = [
     ["대시보드", "/dashboard"],
@@ -41,6 +42,21 @@ export default function Layout({ children, activeMenu }: LayoutProps) {
       alert(getErrorMessage(error, "접근 권한이 없습니다."));
     }
   };
+
+  const loadPendingConnectionCount = async () => {
+    try {
+      const res = await api.get<{ count: number }>("/api/broker-connection/requests/pending-count");
+      setPendingConnectionCount(typeof res.data?.count === "number" ? res.data.count : 0);
+    } catch {
+      setPendingConnectionCount(0);
+    }
+  };
+
+  useEffect(() => {
+    loadPendingConnectionCount();
+    const timer = window.setInterval(loadPendingConnectionCount, 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const Divider = () => (
     <div className="w-[2px] h-[40px] bg-[#E6E8EC] rounded-[2px] shrink-0" />
@@ -105,9 +121,15 @@ export default function Layout({ children, activeMenu }: LayoutProps) {
             <div className="flex items-center ml-[32px]">
               <button
                 type="button"
-                className="flex items-center justify-center w-[44px] h-[44px] hover:bg-neutral-50 rounded-md transition-colors"
+                onClick={() => navigate("/mypage")}
+                className="relative flex items-center justify-center w-[44px] h-[44px] hover:bg-neutral-50 rounded-md transition-colors"
               >
                 <Bell size={22} className="text-Neutral-700" />
+                {pendingConnectionCount > 0 && (
+                  <span className="absolute mt-[-20px] ml-[18px] min-w-[18px] h-[18px] px-1 rounded-full bg-[#EF4444] text-white text-[10px] leading-[18px] font-semibold text-center">
+                    {pendingConnectionCount > 99 ? "99+" : pendingConnectionCount}
+                  </span>
+                )}
               </button>
 
               <button

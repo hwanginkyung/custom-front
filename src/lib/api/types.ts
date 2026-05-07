@@ -73,9 +73,9 @@ export type CaseStatus =
   | "COMPLETED"
   | "CANCELLED";
 
-export type PaymentStatus = "UNPAID" | "PAID" | "OVERDUE";
+export type PaymentStatus = "UNPAID" | "PARTIAL" | "PAID" | "OVERDUE";
 
-export type ShippingMethod = "SEA" | "AIR" | "LAND" | "COURIER";
+export type ShippingMethod = "SEA" | "AIR" | "LAND" | "COURIER" | "MIXED";
 
 export interface Cargo {
   id: number;

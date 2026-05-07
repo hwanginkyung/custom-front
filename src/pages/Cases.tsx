@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Trash2, Upload } from "lucide-react";
+import { Database, Trash2, Upload } from "lucide-react";
 import Layout from "../component/layout/Layout";
 import TablePager from "../component/TablePager";
 import { api } from "../lib/api/client";
+import { getErrorMessage } from "../lib/error/getErrorMessage";
 import type { BrokerCase, CaseStatus, PaymentStatus } from "../lib/api/types";
 
 const PAGE_SIZE = 10;
@@ -20,6 +21,7 @@ const STATUS_LABEL: Record<CaseStatus, string> = {
 
 const PAYMENT_LABEL: Record<PaymentStatus, string> = {
   UNPAID: "미완료",
+  PARTIAL: "부분완료",
   PAID: "완료",
   OVERDUE: "연체",
 };
@@ -29,6 +31,7 @@ const DECLARE_TYPE_LABEL: Record<BrokerCase["shippingMethod"], string> = {
   AIR: "Air",
   LAND: "Land",
   COURIER: "Courier",
+  MIXED: "Mixed",
 };
 
 function toDateLabel(value?: string): string {
@@ -72,10 +75,30 @@ export default function Cases() {
   const [statusFilter, setStatusFilter] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [seedLoading, setSeedLoading] = useState(false);
+
+  const fetchCases = useCallback(async () => {
+    const data = await api.get("/api/cases");
+    setRows(data as unknown as BrokerCase[]);
+  }, []);
 
   useEffect(() => {
-    api.get("/api/cases").then((data: unknown) => setRows(data as BrokerCase[]));
-  }, []);
+    fetchCases();
+  }, [fetchCases]);
+
+  const handleSeedDummy = async () => {
+    if (seedLoading) return;
+    setSeedLoading(true);
+    try {
+      await api.post("/api/admin/cariv-sync/dummy-seed?caseCount=6");
+      await fetchCases();
+      alert("cariv 연동 더미 케이스 6건을 생성했습니다.");
+    } catch (error) {
+      alert(getErrorMessage(error, "더미 데이터 생성에 실패했습니다."));
+    } finally {
+      setSeedLoading(false);
+    }
+  };
 
   const clientOptions = useMemo(
     () => Array.from(new Set(rows.map((row) => row.clientName).filter(Boolean))).sort(),
@@ -149,13 +172,24 @@ export default function Cases() {
               />
             </div>
 
-            <button
-              type="button"
-              className="inline-flex h-[44px] items-center gap-2 rounded-[10px] bg-[#1F4ED8] px-5 text-sm font-semibold text-white hover:bg-[#173eb1]"
-            >
-              <Upload size={16} />
-              신고필증 업로드
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleSeedDummy}
+                disabled={seedLoading}
+                className="inline-flex h-[44px] items-center gap-2 rounded-[10px] border border-[#D8DDE3] bg-white px-5 text-sm font-semibold text-[#2C3138] hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Database size={16} />
+                {seedLoading ? "더미 생성 중..." : "Cariv 더미 생성"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-[44px] items-center gap-2 rounded-[10px] bg-[#1F4ED8] px-5 text-sm font-semibold text-white hover:bg-[#173eb1]"
+              >
+                <Upload size={16} />
+                신고필증 업로드
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-[#E5E7EB]">
